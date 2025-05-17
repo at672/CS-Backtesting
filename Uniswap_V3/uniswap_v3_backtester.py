@@ -71,6 +71,7 @@ class UniswapV3Backtest:
     #         liquidity1 = amount1 / (math.sqrt(price) - math.sqrt(lower_price))
     #         return min(liquidity0, liquidity1)
     
+    ## version 2
     def calculate_liquidity(self, price: float, lower_price: float, upper_price: float,
                             amount0: float, amount1: float) -> float:
         # precompute sqrt values once
@@ -106,6 +107,7 @@ class UniswapV3Backtest:
         
     #     return amount0, amount1
     
+    # version 2
 
     def calculate_amounts(self,
                         liquidity: float,
