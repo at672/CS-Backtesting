@@ -41,16 +41,17 @@ class UniswapV3Backtest:
         # Generate ETH price with trend and volatility
         np.random.seed(42)
         np.random.seed(420)
-
-        drift = -0.0005  # Daily drift: positive=up, negative=down, zero=sideways
-        drift = 0
-        returns = np.random.normal(drift, 0.01, n)
+        # np.random.seed(5656)
+        drift = 0.0005  # Hourly drift: positive=up, negative=down, zero=sideways
+        # drift = 0
+        volatility = 0.002  # More realistic hourly volatility (was 0.01)
+        returns = np.random.normal(drift, volatility, n)
         log_prices = np.cumsum(returns) + np.log(2000)
         prices = np.exp(log_prices)
         # Generate other market data
         liquidity = np.random.uniform(1e9, 2e9, n)  # Pool liquidity
         volume = prices * np.random.uniform(1e5, 2e5, n)  # Volume proportional to price
-        gas_price = np.random.uniform(20, 80, n)  # Gas price in Gwei
+        gas_price = np.random.uniform(15, 55, n)  # Gas price in Gwei
         
         return pd.DataFrame({
             'timestamp': dates,
@@ -129,10 +130,10 @@ class UniswapV3Backtest:
     def calculate_gas_cost(self, gas_price_gwei, operation):
         """Calculate gas cost in USDC"""
         gas_limits = {
-            'add_liquidity': 200000,
-            'remove_liquidity': 180000,
-            'collect_fees': 120000,
-            'rebalance': 400000
+            'add_liquidity': 150000,
+            'remove_liquidity': 120000,
+            'collect_fees': 80000,
+            'rebalance': 250000
         }
         #Convert from giga wei to base
         gas_price_eth = gas_price_gwei * 1e9 / 1e18
@@ -149,6 +150,7 @@ class UniswapV3Backtest:
     
     def estimate_fees(self, position, price, volume_24h, pool_liquidity, hours):
         """Estimate fee earnings for a position"""
+        # ONLY earns fees if I'm in the range.
         if price < position.lower_price or price > position.upper_price:
             return 0, 0
         
@@ -182,13 +184,17 @@ class UniswapV3Backtest:
         initial_liquidity = self.calculate_liquidity(
             initial_price, lower_price, upper_price, initial_eth, initial_usdc)
         
+        # Calculate correct token amounts from this liquidity
+        actual_token0, actual_token1 = self.calculate_amounts(
+            initial_liquidity, initial_price, lower_price, upper_price)
+
         # Create initial position
         self.current_position = Position(
             lower_price=lower_price,
             upper_price=upper_price,
             liquidity=initial_liquidity,
-            token0_amount=initial_eth,
-            token1_amount=initial_usdc,
+            token0_amount=actual_token0,
+            token1_amount=actual_token1,
             fees_earned0=0,
             fees_earned1=0,
             created_at=first_row['timestamp']
@@ -198,10 +204,13 @@ class UniswapV3Backtest:
         gas_cost = self.calculate_gas_cost(first_row['gas_price_gwei'], 'add_liquidity')
         self.total_gas_cost += gas_cost * initial_price  # Convert to USDC
         
+        # Calculate initial NAV correctly
+        self.initial_nav = self._calculate_nav(initial_price)  # Use the same NAV calculation as later iterations
+
         # Track NAV
         self.nav_history.append({
             'timestamp': first_row['timestamp'],
-            'nav': self.initial_capital,
+            'nav': self.initial_nav,
             'price': initial_price
         })
         
@@ -279,7 +288,7 @@ class UniswapV3Backtest:
         
         target_value = (total_value - gas_cost_usdc) / 2
         swap_amount = abs(token0_value - target_value) #USDC
-        
+        print("DEBUG: swap_amount", swap_amount)
         swap_cost = self.calculate_swap_impact(swap_amount, market_row['liquidity']) * swap_amount
         self.total_swap_cost += swap_cost
         
@@ -297,13 +306,15 @@ class UniswapV3Backtest:
         new_liquidity = self.calculate_liquidity(
             current_price, lower_price, upper_price, new_token0, new_token1)
         
+        actual_token0, actual_token1 = self.calculate_amounts(new_liquidity, current_price, lower_price, upper_price)
+
         # Create new position
         self.current_position = Position(
             lower_price=lower_price,
             upper_price=upper_price,
             liquidity=new_liquidity,
-            token0_amount=new_token0,
-            token1_amount=new_token1,
+            token0_amount=actual_token0,
+            token1_amount=actual_token1,
             fees_earned0=0,
             fees_earned1=0,
             created_at=current_time
@@ -393,7 +404,7 @@ class UniswapV3Backtest:
     def plot_results(self, results):
         """Plot backtest results"""
         nav_df = results['nav_df']
-        
+        nav_df.to_csv('nav_history.csv', index = False)
         # Create figure with subplots
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
         
