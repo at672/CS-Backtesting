@@ -60,18 +60,6 @@ class UniswapV3Backtest:
             'gas_price_gwei': gas_price
         })
     
-    # def calculate_liquidity(self, price, lower_price, upper_price, amount0, amount1):
-    #     """Simplified Uniswap V3 liquidity calculation"""
-    #     if price <= lower_price:
-    #         return amount0 * math.sqrt(lower_price * upper_price) / (upper_price - lower_price)
-    #     elif price >= upper_price:
-    #         return amount1 / (math.sqrt(upper_price) - math.sqrt(lower_price))
-    #     else:
-    #         liquidity0 = amount0 * math.sqrt(price * upper_price) / (upper_price - price)
-    #         liquidity1 = amount1 / (math.sqrt(price) - math.sqrt(lower_price))
-    #         return min(liquidity0, liquidity1)
-    
-    ## version 2
     def calculate_liquidity(self, price: float, lower_price: float, upper_price: float,
                             amount0: float, amount1: float) -> float:
         # precompute sqrt values once
@@ -91,23 +79,6 @@ class UniswapV3Backtest:
         liquidity0 = amount0 * (sqrt_upper * sqrt_p) / (sqrt_upper - sqrt_p)
         liquidity1 = amount1 / (sqrt_p - sqrt_lower)
         return min(liquidity0, liquidity1)
-
-
-    # def calculate_amounts(self, liquidity, price, lower_price, upper_price):
-    #     """Calculate token amounts from liquidity"""
-    #     if price <= lower_price:
-    #         amount0 = liquidity * (upper_price - lower_price) / (math.sqrt(lower_price) * math.sqrt(upper_price))
-    #         amount1 = 0
-    #     elif price >= upper_price:
-    #         amount0 = 0
-    #         amount1 = liquidity * (math.sqrt(upper_price) - math.sqrt(lower_price))
-    #     else:
-    #         amount0 = liquidity * (upper_price - price) / (math.sqrt(price) * math.sqrt(upper_price))
-    #         amount1 = liquidity * (math.sqrt(price) - math.sqrt(lower_price))
-        
-    #     return amount0, amount1
-    
-    # version 2
 
     def calculate_amounts(self,
                         liquidity: float,
@@ -246,7 +217,8 @@ class UniswapV3Backtest:
                   current_price <= self.current_position.upper_price)
             
             # Update position token amounts based on new price
-            if self.current_position and price_in_range:
+            #if self.current_position and price_in_range:
+            if self.current_position:
                 self.current_position.token0_amount, self.current_position.token1_amount = \
                     self.calculate_amounts(self.current_position.liquidity, current_price, 
                                         self.current_position.lower_price, 
@@ -302,11 +274,11 @@ class UniswapV3Backtest:
         self.total_gas_cost += gas_cost_usdc
         
         # Calculate swap costs (to rebalance to 50/50)
-        token0_value = token0_amount * current_price
-        token1_value = token1_amount
+        token0_value = token0_amount * current_price # ETH balance * USDC/ETH => USDC
+        token1_value = token1_amount # already in USDC. token1 is USDC
         
         target_value = (total_value - gas_cost_usdc) / 2
-        swap_amount = abs(token0_value - target_value)
+        swap_amount = abs(token0_value - target_value) #USDC
         
         swap_cost = self.calculate_swap_impact(swap_amount, market_row['liquidity']) * swap_amount
         self.total_swap_cost += swap_cost
