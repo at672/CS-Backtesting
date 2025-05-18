@@ -41,11 +41,11 @@ class UniswapV3Backtest:
         # Generate ETH price with trend and volatility
         np.random.seed(42)
         np.random.seed(420)
-        np.random.seed(5656)
+        #np.random.seed(5656)
         # drift = -0.0005  # Hourly drift: positive=up, negative=down, zero=sideways
         drift = 0
-        # drift = 0.0005
-        volatility = 0.0075  # More realistic hourly volatility (was 0.01)
+        drift = 0.0005
+        volatility = 0.0025  # More realistic hourly volatility (was 0.01)
         returns = np.random.normal(drift, volatility, n)
         log_prices = np.cumsum(returns) + np.log(2000)
         prices = np.exp(log_prices)
@@ -241,9 +241,10 @@ class UniswapV3Backtest:
 
         # After calculating initial_liquidity and getting actual_token0, actual_token1
         initial_position_value = actual_token0 * initial_price + actual_token1
-        print(f"Initial capital: ${self.initial_capital}")
-        print(f"Initial position value: ${initial_position_value}")
-        print(f"Difference: ${self.initial_capital - initial_position_value} ({(self.initial_capital - initial_position_value) / self.initial_capital * 100:.2f}%)")
+        # DEBUG statements
+        #print(f"Initial capital: ${self.initial_capital}")
+        #print(f"Initial position value: ${initial_position_value}")
+        #print(f"Difference: ${self.initial_capital - initial_position_value} ({(self.initial_capital - initial_position_value) / self.initial_capital * 100:.2f}%)")
 
         # Create initial position
         self.current_position = Position(
@@ -352,7 +353,7 @@ class UniswapV3Backtest:
         
         target_value = (total_value - gas_cost_usdc) / 2
         swap_amount = abs(token0_value - target_value) #USDC
-        print("DEBUG: swap_amount", swap_amount)
+        # print("DEBUG: swap_amount", swap_amount)
         swap_cost = self.calculate_swap_impact(swap_amount, market_row['liquidity']) * swap_amount
         self.total_swap_cost += swap_cost
         
