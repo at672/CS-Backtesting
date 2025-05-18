@@ -41,10 +41,11 @@ class UniswapV3Backtest:
         # Generate ETH price with trend and volatility
         np.random.seed(42)
         np.random.seed(420)
-        # np.random.seed(5656)
-        # drift = 0.0005  # Hourly drift: positive=up, negative=down, zero=sideways
+        np.random.seed(5656)
+        # drift = -0.0005  # Hourly drift: positive=up, negative=down, zero=sideways
         drift = 0
-        volatility = 0.002  # More realistic hourly volatility (was 0.01)
+        # drift = 0.0005
+        volatility = 0.0075  # More realistic hourly volatility (was 0.01)
         returns = np.random.normal(drift, volatility, n)
         log_prices = np.cumsum(returns) + np.log(2000)
         prices = np.exp(log_prices)
@@ -204,33 +205,45 @@ class UniswapV3Backtest:
         initial_price = first_row['price']
         lower_price, upper_price = self.calculate_price_range(initial_price)
         
-        # Split initial capital 50/50
-        initial_eth = (self.initial_capital / 2) / initial_price
-        initial_usdc = self.initial_capital / 2
+        # # Split initial capital 50/50
+        # initial_eth = (self.initial_capital / 2) / initial_price
+        # initial_usdc = self.initial_capital / 2
         
-        # Calculate the theoretically optimal amounts for the given range
-        price_geometric_mean = math.sqrt(lower_price * upper_price)
-        ratio = math.sqrt(initial_price / price_geometric_mean)
+        # # Calculate the theoretically optimal amounts for the given range
+        # price_geometric_mean = math.sqrt(lower_price * upper_price)
+        # ratio = math.sqrt(initial_price / price_geometric_mean)
 
 
-        # If price = sqrt(lower * upper), you get perfect 50/50
-        # Otherwise, adjust the ratio
-        optimal_eth = self.initial_capital / (initial_price + price_geometric_mean)
-        optimal_usdc = optimal_eth * price_geometric_mean
+        # # If price = sqrt(lower * upper), you get perfect 50/50
+        # # Otherwise, adjust the ratio
+        # optimal_eth = self.initial_capital / (initial_price + price_geometric_mean)
+        # optimal_usdc = optimal_eth * price_geometric_mean
 
-        # Initialize with these optimal amounts
+        # # Initialize with these optimal amounts
+        # initial_liquidity = self.calculate_liquidity(
+        #     initial_price, lower_price, upper_price, optimal_eth, optimal_usdc)
+        
+        # # Calculate correct token amounts from this liquidity
+        # actual_token0, actual_token1 = self.calculate_amounts(
+        #     initial_liquidity, initial_price, lower_price, upper_price)
+
+        ## NEW
+        new_token0, new_token1 = self.calculate_optimal_amounts(
+            self.initial_capital, initial_price, lower_price, upper_price)
+        
+        # Calculate liquidity
         initial_liquidity = self.calculate_liquidity(
-            initial_price, lower_price, upper_price, optimal_eth, optimal_usdc)
-        
-        # Calculate correct token amounts from this liquidity
+            initial_price, lower_price, upper_price, new_token0, new_token1)
+
+        # Get actual tokens from liquidity 
         actual_token0, actual_token1 = self.calculate_amounts(
             initial_liquidity, initial_price, lower_price, upper_price)
 
         # After calculating initial_liquidity and getting actual_token0, actual_token1
-        position_value = actual_token0 * initial_price + actual_token1
+        initial_position_value = actual_token0 * initial_price + actual_token1
         print(f"Initial capital: ${self.initial_capital}")
-        print(f"Initial position value: ${position_value}")
-        print(f"Difference: ${self.initial_capital - position_value} ({(self.initial_capital - position_value) / self.initial_capital * 100:.2f}%)")
+        print(f"Initial position value: ${initial_position_value}")
+        print(f"Difference: ${self.initial_capital - initial_position_value} ({(self.initial_capital - initial_position_value) / self.initial_capital * 100:.2f}%)")
 
         # Create initial position
         self.current_position = Position(
@@ -244,12 +257,19 @@ class UniswapV3Backtest:
             created_at=first_row['timestamp']
         )
         
+
+        #TODO: Should initial NAV be before or after gas cost is recorded?
+
         # Record initial gas cost
         gas_cost = self.calculate_gas_cost(first_row['gas_price_gwei'], 'add_liquidity')
         self.total_gas_cost += gas_cost * initial_price  # Convert to USDC
         
+        #TODO which is correct?
         # Calculate initial NAV correctly
         self.initial_nav = self._calculate_nav(initial_price)  # Use the same NAV calculation as later iterations
+        # Set initial NAV to the ACTUAL position value, not the ideal initial capital
+        self.initial_nav = initial_position_value - self.total_gas_cost
+
 
         # Track NAV
         self.nav_history.append({
