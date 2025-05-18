@@ -42,8 +42,8 @@ class UniswapV3Backtest:
         np.random.seed(42)
         np.random.seed(420)
         # np.random.seed(5656)
-        drift = 0.0005  # Hourly drift: positive=up, negative=down, zero=sideways
-        # drift = 0
+        # drift = 0.0005  # Hourly drift: positive=up, negative=down, zero=sideways
+        drift = 0
         volatility = 0.002  # More realistic hourly volatility (was 0.01)
         returns = np.random.normal(drift, volatility, n)
         log_prices = np.cumsum(returns) + np.log(2000)
@@ -148,6 +148,34 @@ class UniswapV3Backtest:
         
         return impact + fee
     
+    def calculate_optimal_amounts(self, total_value, current_price, lower_price, upper_price):
+        """Calculate optimal token amounts for a given price range"""
+        # Calculate geometric mean of the range
+        price_geometric_mean = math.sqrt(lower_price * upper_price)
+        
+        # Special cases: price outside range
+        if current_price <= lower_price:
+            # All in token0 (ETH)
+            return total_value / current_price, 0
+        elif current_price >= upper_price:
+            # All in token1 (USDC)
+            return 0, total_value
+        
+        # Calculate the optimal ratio based on current price relative to range
+        sqrt_p = math.sqrt(current_price)
+        sqrt_lower = math.sqrt(lower_price)
+        sqrt_upper = math.sqrt(upper_price)
+        
+        # Calculate liquidity value L
+        L = total_value / ((sqrt_upper - sqrt_p) / (sqrt_p * sqrt_upper) * current_price + (sqrt_p - sqrt_lower))
+        
+        # Calculate optimal amounts
+        token0 = L * (sqrt_upper - sqrt_p) / (sqrt_p * sqrt_upper)
+        token1 = L * (sqrt_p - sqrt_lower)
+        
+        return token0, token1
+
+    
     def estimate_fees(self, position, price, volume_24h, pool_liquidity, hours):
         """Estimate fee earnings for a position"""
         # ONLY earns fees if I'm in the range.
@@ -180,13 +208,29 @@ class UniswapV3Backtest:
         initial_eth = (self.initial_capital / 2) / initial_price
         initial_usdc = self.initial_capital / 2
         
-        # Calculate initial liquidity
+        # Calculate the theoretically optimal amounts for the given range
+        price_geometric_mean = math.sqrt(lower_price * upper_price)
+        ratio = math.sqrt(initial_price / price_geometric_mean)
+
+
+        # If price = sqrt(lower * upper), you get perfect 50/50
+        # Otherwise, adjust the ratio
+        optimal_eth = self.initial_capital / (initial_price + price_geometric_mean)
+        optimal_usdc = optimal_eth * price_geometric_mean
+
+        # Initialize with these optimal amounts
         initial_liquidity = self.calculate_liquidity(
-            initial_price, lower_price, upper_price, initial_eth, initial_usdc)
+            initial_price, lower_price, upper_price, optimal_eth, optimal_usdc)
         
         # Calculate correct token amounts from this liquidity
         actual_token0, actual_token1 = self.calculate_amounts(
             initial_liquidity, initial_price, lower_price, upper_price)
+
+        # After calculating initial_liquidity and getting actual_token0, actual_token1
+        position_value = actual_token0 * initial_price + actual_token1
+        print(f"Initial capital: ${self.initial_capital}")
+        print(f"Initial position value: ${position_value}")
+        print(f"Difference: ${self.initial_capital - position_value} ({(self.initial_capital - position_value) / self.initial_capital * 100:.2f}%)")
 
         # Create initial position
         self.current_position = Position(
@@ -295,13 +339,13 @@ class UniswapV3Backtest:
         # Adjusted total after costs
         adjusted_total = total_value - gas_cost_usdc - swap_cost
         
-        # New token amounts (50/50 split)
-        new_token0 = (adjusted_total / 2) / current_price
-        new_token1 = adjusted_total / 2
-        
         # New price range
         lower_price, upper_price = self.calculate_price_range(current_price)
-        
+
+        # New token amounts (optimal distribution)
+        new_token0, new_token1 = self.calculate_optimal_amounts(
+            adjusted_total, current_price, lower_price, upper_price)
+
         # Calculate new liquidity
         new_liquidity = self.calculate_liquidity(
             current_price, lower_price, upper_price, new_token0, new_token1)
