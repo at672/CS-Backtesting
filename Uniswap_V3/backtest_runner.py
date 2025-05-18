@@ -21,7 +21,7 @@ parameter_sets = [
         "end_date": datetime(2024, 4, 1),
         "eth_start_price": 2000,
         "drift": 0,
-        "volatility": 0.0075,
+        "volatility": 0.0025,
         "random_seed": random_seed,
         "gas_price_range": (15, 55),
         "volume_range": (1e5, 2e5)
@@ -49,7 +49,7 @@ parameter_sets = [
         "end_date": datetime(2024, 4, 1),
         "eth_start_price": 2000,
         "drift": 0,
-        "volatility": 0.0025,
+        "volatility": 0.0015,
         "random_seed": random_seed,
         "gas_price_range": (15, 55),
         "volume_range": (1e5, 2e5)
